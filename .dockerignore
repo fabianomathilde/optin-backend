@@ -1,0 +1,10 @@
+target/
+.git/
+.github/
+.idea/
+.vscode/
+deploy/
+docs/
+*.md
+compose.yaml
+.DS_Store
