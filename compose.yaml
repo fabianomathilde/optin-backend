@@ -1,0 +1,24 @@
+# Local development database. Runs with podman compose (or docker compose).
+#   podman compose up -d postgres
+#   podman compose down        (keeps data)
+#   podman compose down -v     (removes data)
+services:
+  postgres:
+    image: docker.io/library/postgres:17
+    container_name: optin-postgres
+    environment:
+      POSTGRES_DB: optin
+      POSTGRES_USER: optin
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-optin}
+    ports:
+      - "5432:5432"
+    volumes:
+      - optin-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U optin -d optin"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  optin-pgdata:
