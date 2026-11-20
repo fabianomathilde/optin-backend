@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /** Driving REST adapter. Paths and shapes follow src/main/resources/optin-api.yaml. */
 @RestController
@@ -59,8 +60,9 @@ class OptInController {
                 .stream().map(OptInResponse::from).toList();
     }
 
+    /** A malformed UUID in the path is rejected by Spring with 400 before reaching the use case. */
     @PostMapping("/opt-ins/{id}/revoke")
-    OptInResponse revoke(@PathVariable int id) {
+    OptInResponse revoke(@PathVariable UUID id) {
         return OptInResponse.from(revokeOptIn.revoke(new RevokeOptInCommand(id)));
     }
 }

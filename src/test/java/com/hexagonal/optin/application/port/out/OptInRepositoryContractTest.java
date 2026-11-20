@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -44,7 +45,7 @@ public abstract class OptInRepositoryContractTest {
 
         OptIn saved = persist(draft(merchant, grantee, LocalDate.of(2027, 11, 1)));
 
-        assertThat(saved.id()).isNotNull();
+        assertThat(saved.id()).isNotNull();                                    // a UUID assigned by the repository
         assertThat(saved.merchant()).isEqualTo(merchant);
         assertThat(saved.grantee()).isEqualTo(grantee);
         assertThat(saved.frequency()).isEqualTo(Frequency.MONTHLY);
@@ -57,7 +58,7 @@ public abstract class OptInRepositoryContractTest {
 
     @Test
     public void findByIdIsEmptyForUnknownId() {
-        assertThat(repository().findById(Integer.MAX_VALUE)).isEmpty();
+        assertThat(repository().findById(UUID.randomUUID())).isEmpty();
     }
 
     @Test

@@ -86,12 +86,12 @@ jobs:
           kubectl -n "$NAMESPACE" rollout status "deployment/${APP}" --timeout=10m
       - name: smoke test
         run: |
-          # Autopilot may need a minute to place the pod, hence the long pod-running-timeout.
-          kubectl -n "$NAMESPACE" run "smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --rm -i --restart=Never \
-            --pod-running-timeout=5m \
-            --image=curlimages/curl:8.17.0 \
-            --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":100,"seccompProfile":{"type":"RuntimeDefault"}}}}' \
-            -- curl -fsS --retry 5 --retry-delay 3 "http://${APP}/actuator/health/readiness"
+          # Tunnel from the runner to the service: no extra pod or public image needed, so the
+          # private cluster needs no internet access (no Cloud NAT).
+          kubectl -n "$NAMESPACE" port-forward "svc/${APP}" 18080:80 >/tmp/port-forward.log 2>&1 &
+          trap 'kill %1' EXIT
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors \
+            "http://127.0.0.1:18080/actuator/health/readiness"
       - name: summary
         run: echo "### dev ← \`${{ steps.image.outputs.ref }}\` (${BRANCH} @ ${SHA:0:7})" >> "$GITHUB_STEP_SUMMARY"
 

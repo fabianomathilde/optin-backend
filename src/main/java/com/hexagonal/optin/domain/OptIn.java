@@ -3,13 +3,14 @@ package com.hexagonal.optin.domain;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Opt-in aggregate. Holds the rules for granting, revoking and validity (see ADR 0003).
- * {@code id} is null until the opt-in is saved; the repository assigns it.
+ * {@code id} is null until the opt-in is saved; the repository assigns a UUID (ADR 0005).
  */
 public record OptIn(
-        Integer id,
+        UUID id,
         String merchant,
         String grantee,
         Frequency frequency,
@@ -48,6 +49,11 @@ public record OptIn(
         }
         return new OptIn(id, merchant, grantee, frequency, startDate, validUntil,
                 OptInStatus.REVOKED, at);
+    }
+
+    /** Copy of this opt-in with the given id; used by repositories when they assign one. */
+    public OptIn withId(UUID newId) {
+        return new OptIn(newId, merchant, grantee, frequency, startDate, validUntil, status, revokedAt);
     }
 
     public boolean isActive() {

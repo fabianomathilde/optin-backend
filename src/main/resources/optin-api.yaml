@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Optin API
-  version: 0.1.0
+  version: 0.2.0
   description: Receivables opt-in service. A merchant grants a financial institution (grantee) an opt-in to view its receivables schedule.
 servers:
   - url: /
@@ -87,8 +87,7 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-            format: int32
+            $ref: '#/components/schemas/OptInId'
       responses:
         '200':
           description: Opt-in revoked
@@ -96,6 +95,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OptIn'
+        '400':
+          description: The id is not a valid UUID
         '404':
           description: Opt-in not found
           content:
@@ -104,6 +105,26 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: Opt-in is already revoked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /merchants/{merchant}:
+    put:
+      operationId: registerMerchant
+      summary: Add a merchant to the merchant list (R2). Idempotent; an existing merchant is left unchanged.
+      parameters:
+        - name: merchant
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Document'
+      responses:
+        '204':
+          description: Merchant is on the list (added now or already present)
+        '422':
+          description: The merchant document is not a valid CNPJ format (14 digits)
           content:
             application/json:
               schema:
@@ -137,6 +158,11 @@ components:
       description: CNPJ, 14 digits, no punctuation
       pattern: '^[0-9]{14}$'
 
+    OptInId:
+      type: string
+      format: uuid
+      description: Opt-in identifier (UUID, assigned by the service)
+
     Frequency:
       type: string
       enum: [DAILY, WEEKLY, MONTHLY]
@@ -168,8 +194,7 @@ components:
       required: [id, merchant, grantee, frequency, startDate, validUntil, status]
       properties:
         id:
-          type: integer
-          format: int32
+          $ref: '#/components/schemas/OptInId'
         merchant:
           $ref: '#/components/schemas/Document'
         grantee:

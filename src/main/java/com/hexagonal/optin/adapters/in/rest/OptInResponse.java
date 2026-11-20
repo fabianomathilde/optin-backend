@@ -6,10 +6,11 @@ import com.hexagonal.optin.domain.OptInStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.UUID;
 
 /** HTTP response body for an opt-in (see optin-api.yaml, schema OptIn). */
 public record OptInResponse(
-        Integer id,
+        UUID id,
         String merchant,
         String grantee,
         Frequency frequency,

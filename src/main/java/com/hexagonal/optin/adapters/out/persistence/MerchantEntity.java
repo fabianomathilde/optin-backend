@@ -23,6 +23,11 @@ class MerchantEntity {
         // required by JPA
     }
 
+    MerchantEntity(String merchant, LocalDate createdAt) {
+        this.merchant = merchant;
+        this.createdAt = createdAt;
+    }
+
     String getMerchant() {
         return merchant;
     }

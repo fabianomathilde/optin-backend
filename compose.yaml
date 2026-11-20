@@ -1,5 +1,6 @@
-# Local development database. Runs with podman compose (or docker compose).
-#   podman compose up -d postgres
+# Local development dependencies. Runs with podman compose (or docker compose).
+#   podman compose up -d postgres     (default profile)
+#   podman compose up -d firestore    (profile "firestore", see deploy/README.md)
 #   podman compose down        (keeps data)
 #   podman compose down -v     (removes data)
 services:
@@ -19,6 +20,14 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+
+  # Firestore emulator for the "firestore" profile (ADR 0005). Data lives only while it runs.
+  firestore:
+    image: gcr.io/google.com/cloudsdktool/google-cloud-cli:emulators
+    container_name: optin-firestore
+    command: ["gcloud", "emulators", "firestore", "start", "--host-port=0.0.0.0:8081"]
+    ports:
+      - "8081:8081"
 
 volumes:
   optin-pgdata:

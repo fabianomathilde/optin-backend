@@ -39,9 +39,13 @@ Infrastructure lives in a separate repository, `registry-institution-iac` (Terra
    `develop` and `main` it also pushes the image, tagged with the commit SHA (immutable tags).
    `cd.yaml` runs after a successful CI push: `develop` deploys to dev; `main` deploys to dev and
    then, after a manual approval on the GitHub `prod` environment, promotes the same digest to prod.
-7. **Ingress:** GKE Ingress (external HTTP(S) load balancer) on a reserved static IP,
-   container-native load balancing (NEGs). When a domain exists, ExternalDNS publishes the
-   hostname in Cloud DNS and a Google-managed certificate serves HTTPS.
+7. **No public endpoint by default.** The app is reached with `kubectl port-forward` while
+   the project is a learning environment; a public load balancer is billed per hour even when idle.
+   An optional Kustomize component adds a GKE Ingress on a reserved static IP (container-native
+   load balancing); with a domain, ExternalDNS publishes the hostname in Cloud DNS and a
+   Google-managed certificate serves HTTPS.
+8. **Start/stop instead of destroy.** `scripts/env.sh` (IaC repo) scales the app to zero and
+   stops Cloud SQL; Terraform ignores the database's on/off state after creating it.
 
 ## Alternatives considered
 

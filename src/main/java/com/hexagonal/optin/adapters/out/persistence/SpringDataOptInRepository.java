@@ -6,9 +6,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /** Spring Data repository for {@link OptInEntity}. Used only by the persistence adapter. */
-interface SpringDataOptInRepository extends JpaRepository<OptInEntity, Integer> {
+interface SpringDataOptInRepository extends JpaRepository<OptInEntity, UUID> {
 
     Optional<OptInEntity> findFirstByMerchantAndGranteeAndStatus(String merchant, String grantee, OptInStatus status);
 
