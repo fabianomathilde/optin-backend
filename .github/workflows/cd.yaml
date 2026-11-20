@@ -1,0 +1,147 @@
+# CD: deploys what CI published, in two steps.
+#
+#   CI succeeded on develop -> dev
+#   CI succeeded on main    -> dev -> approval -> prod (the same digest, copied to the prod registry)
+#   manual run              -> redeploy / roll back the image of any commit SHA (run it from main
+#                              to reach prod)
+#
+# GitHub Environments (variables from the IaC repo:
+#   scripts/tf.sh <env> foundation output github_variables_app_repo):
+#   dev  : GCP_REGION, WIF_PROVIDER, DEPLOYER_SA, GKE_CLUSTER, ARTIFACT_REPOSITORY
+#   prod : the same keys for prod, plus DEV_ARTIFACT_REPOSITORY
+#          (us-central1-docker.pkg.dev/registry-institution-dev/optin);
+#          Required reviewers = you, Deployment branches = main
+#
+# Note: workflow_run always uses the cd.yaml from the default branch (main), so changes to this
+# file take effect once they reach main.
+
+name: cd
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [develop, main]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit SHA whose image (already published by CI) should be deployed
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  APP: optin
+  NAMESPACE: optin
+  KUSTOMIZE_VERSION: 5.7.1
+  SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.sha || github.event.workflow_run.head_sha }}
+  BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.workflow_run.head_branch }}
+
+jobs:
+  dev:
+    # Only after a successful CI push (not after PR runs or failures).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    environment: dev
+    concurrency: deploy-optin-dev
+    outputs:
+      digest: ${{ steps.image.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SHA }}
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - id: image
+        name: resolve image digest from the commit SHA tag
+        run: |
+          DIGEST="$(gcloud artifacts docker images describe "${{ vars.ARTIFACT_REPOSITORY }}/${APP}:${SHA}" \
+            --format='value(image_summary.digest)')"
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]] || { echo "no image for ${SHA}"; exit 1; }
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+          echo "ref=${{ vars.ARTIFACT_REPOSITORY }}/${APP}@${DIGEST}" >> "$GITHUB_OUTPUT"
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GCP_REGION }}
+      - name: install kustomize (if missing)
+        run: |
+          command -v kustomize && exit 0
+          curl -sSfL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" \
+            | bash -s -- "$KUSTOMIZE_VERSION" /usr/local/bin
+      - name: deploy
+        working-directory: deploy/k8s/overlays/dev
+        run: |
+          kustomize edit set image "${APP}=${{ steps.image.outputs.ref }}"
+          kustomize build . > /tmp/manifests.yaml
+          kubectl apply -f /tmp/manifests.yaml
+          kubectl -n "$NAMESPACE" rollout status "deployment/${APP}" --timeout=10m
+      - name: smoke test
+        run: |
+          # Autopilot may need a minute to place the pod, hence the long pod-running-timeout.
+          kubectl -n "$NAMESPACE" run "smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --rm -i --restart=Never \
+            --pod-running-timeout=5m \
+            --image=curlimages/curl:8.17.0 \
+            --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":100,"seccompProfile":{"type":"RuntimeDefault"}}}}' \
+            -- curl -fsS --retry 5 --retry-delay 3 "http://${APP}/actuator/health/readiness"
+      - name: summary
+        run: echo "### dev ← \`${{ steps.image.outputs.ref }}\` (${BRANCH} @ ${SHA:0:7})" >> "$GITHUB_STEP_SUMMARY"
+
+  prod:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref_name == 'main') ||
+      github.event.workflow_run.head_branch == 'main'
+    needs: dev
+    runs-on: ubuntu-latest
+    environment: prod # waits for the Required reviewers
+    concurrency: deploy-optin-prod
+    env:
+      DIGEST: ${{ needs.dev.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SHA }}
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - id: image
+        name: promote the dev digest into the prod registry
+        run: |
+          TARGET_REPO="${{ vars.ARTIFACT_REPOSITORY }}/${APP}"
+          if gcloud artifacts docker images describe "${TARGET_REPO}@${DIGEST}" >/dev/null 2>&1; then
+            echo "already in prod registry"
+          else
+            gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+            docker buildx imagetools create \
+              --tag "${TARGET_REPO}:${SHA}" \
+              "${{ vars.DEV_ARTIFACT_REPOSITORY }}/${APP}@${DIGEST}"
+          fi
+          echo "ref=${TARGET_REPO}@${DIGEST}" >> "$GITHUB_OUTPUT"
+      - uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ vars.GCP_REGION }}
+      - name: install kustomize (if missing)
+        run: |
+          command -v kustomize && exit 0
+          curl -sSfL "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" \
+            | bash -s -- "$KUSTOMIZE_VERSION" /usr/local/bin
+      - name: deploy
+        working-directory: deploy/k8s/overlays/prod
+        run: |
+          kustomize edit set image "${APP}=${{ steps.image.outputs.ref }}"
+          kustomize build . > /tmp/manifests.yaml
+          kubectl apply -f /tmp/manifests.yaml
+          kubectl -n "$NAMESPACE" rollout status "deployment/${APP}" --timeout=10m
+      - name: summary
+        run: echo "### prod ← \`${{ steps.image.outputs.ref }}\` (${BRANCH} @ ${SHA:0:7})" >> "$GITHUB_STEP_SUMMARY"

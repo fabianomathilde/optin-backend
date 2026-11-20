@@ -1,0 +1,88 @@
+# CI: builds every change.
+#
+#   any branch push / any pull request -> ./mvnw verify + docker build (nothing pushed)
+#   push to develop or main            -> ./mvnw verify + docker build + push to the dev registry,
+#                                         tagged with the commit SHA; cd.yaml then deploys it
+#
+# Publishing uses the "dev" GitHub Environment variables (every image is born in the dev
+# registry): WIF_PROVIDER, DEPLOYER_SA, GCP_REGION, ARTIFACT_REPOSITORY
+
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  APP: optin
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - name: ./mvnw verify
+        run: ./mvnw -B -ntp verify
+
+  # Any branch or PR: prove the image builds, without credentials and without pushing.
+  image:
+    if: ${{ !(github.event_name == 'push' && (github.ref_name == 'develop' || github.ref_name == 'main')) }}
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          tags: ${{ env.APP }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # develop / main: build and push. The tag is the commit SHA; tags are immutable.
+  publish:
+    if: github.event_name == 'push' && (github.ref_name == 'develop' || github.ref_name == 'main')
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: docker login (Artifact Registry)
+        run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+      - uses: docker/setup-buildx-action@v3
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: ${{ vars.ARTIFACT_REPOSITORY }}/${{ env.APP }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.ref.name=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: summary
+        run: |
+          echo "### Image published" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`${{ vars.ARTIFACT_REPOSITORY }}/${APP}@${{ steps.push.outputs.digest }}\` (tag \`${{ github.sha }}\`)" >> "$GITHUB_STEP_SUMMARY"
