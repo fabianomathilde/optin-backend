@@ -11,7 +11,7 @@ to run in. Goals: practice on a production-like GCP setup (Kubernetes, managed d
 external DNS, Pub/Sub, BigQuery), keep the cost of a training project low, and keep the
 infrastructure reproducible so environments can be destroyed and recreated at will.
 
-Two GCP projects: `registry-institution-dev` (development) and `registry-institution` (prod).
+Two GCP projects: `registry-institution-dev` (development) and `registry-institution-prd` (prod).
 Infrastructure lives in a separate repository, `registry-institution-iac` (Terraform).
 
 ## Decision

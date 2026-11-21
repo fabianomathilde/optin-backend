@@ -6,7 +6,7 @@
 #                              to reach prod)
 #
 # GitHub Environments (variables from the IaC repo:
-#   scripts/tf.sh <env> foundation output github_variables_app_repo):
+#   scripts/tf.sh <env> identities output -json github_variables | jq '."optin-backend-ci"'):
 #   dev  : GCP_REGION, WIF_PROVIDER, DEPLOYER_SA, GKE_CLUSTER, ARTIFACT_REPOSITORY
 #   prod : the same keys for prod, plus DEV_ARTIFACT_REPOSITORY
 #          (us-central1-docker.pkg.dev/registry-institution-dev/optin-backend);
