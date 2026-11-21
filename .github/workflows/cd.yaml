@@ -9,7 +9,7 @@
 #   scripts/tf.sh <env> foundation output github_variables_app_repo):
 #   dev  : GCP_REGION, WIF_PROVIDER, DEPLOYER_SA, GKE_CLUSTER, ARTIFACT_REPOSITORY
 #   prod : the same keys for prod, plus DEV_ARTIFACT_REPOSITORY
-#          (us-central1-docker.pkg.dev/registry-institution-dev/optin);
+#          (us-central1-docker.pkg.dev/registry-institution-dev/optin-backend);
 #          Required reviewers = you, Deployment branches = main
 #
 # Note: workflow_run always uses the cd.yaml from the default branch (main), so changes to this
@@ -34,8 +34,8 @@ permissions:
   id-token: write
 
 env:
-  APP: optin
-  NAMESPACE: optin
+  APP: optin-backend
+  NAMESPACE: optin-backend
   KUSTOMIZE_VERSION: 5.7.1
   SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.sha || github.event.workflow_run.head_sha }}
   BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.workflow_run.head_branch }}
@@ -48,7 +48,7 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     environment: dev
-    concurrency: deploy-optin-dev
+    concurrency: deploy-optin-backend-dev
     outputs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
@@ -102,7 +102,7 @@ jobs:
     needs: dev
     runs-on: ubuntu-latest
     environment: prod # waits for the Required reviewers
-    concurrency: deploy-optin-prod
+    concurrency: deploy-optin-backend-prod
     env:
       DIGEST: ${{ needs.dev.outputs.digest }}
     steps:
