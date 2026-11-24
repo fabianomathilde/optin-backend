@@ -51,6 +51,9 @@ jobs:
           cache-to: type=gha,mode=max
 
   # develop / main: build and push. The tag is the commit SHA; tags are immutable.
+  # The same commit can reach both branches (develop created from main, a fast-forward merge),
+  # so an image that already exists for this SHA is reused instead of pushed again: a rebuild
+  # would produce a different digest, which the immutable tag rejects.
   publish:
     if: github.event_name == 'push' && (github.ref_name == 'develop' || github.ref_name == 'main')
     needs: verify
@@ -68,8 +71,17 @@ jobs:
       - uses: google-github-actions/setup-gcloud@v2
       - name: docker login (Artifact Registry)
         run: gcloud auth configure-docker "${{ vars.GCP_REGION }}-docker.pkg.dev" --quiet
+      - id: existing
+        name: image already published for this commit?
+        run: |
+          DIGEST="$(gcloud artifacts docker images describe "${{ vars.ARTIFACT_REPOSITORY }}/${APP}:${{ github.sha }}" \
+            --format='value(image_summary.digest)' 2>/dev/null || true)"
+          echo "digest=${DIGEST}" >> "$GITHUB_OUTPUT"
+          [[ -n "${DIGEST}" ]] && echo "Reusing ${DIGEST} (already published for ${{ github.sha }})" || true
       - uses: docker/setup-buildx-action@v3
+        if: steps.existing.outputs.digest == ''
       - id: push
+        if: steps.existing.outputs.digest == ''
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -85,4 +97,4 @@ jobs:
       - name: summary
         run: |
           echo "### Image published" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`${{ vars.ARTIFACT_REPOSITORY }}/${APP}@${{ steps.push.outputs.digest }}\` (tag \`${{ github.sha }}\`)" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`${{ vars.ARTIFACT_REPOSITORY }}/${APP}@${{ steps.push.outputs.digest || steps.existing.outputs.digest }}\` (tag \`${{ github.sha }}\`)" >> "$GITHUB_STEP_SUMMARY"
