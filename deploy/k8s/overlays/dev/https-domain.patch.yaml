@@ -1,0 +1,17 @@
+# Hostname for dev. Used only when the https-domain component is enabled in kustomization.yaml.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: optin-backend
+  namespace: optin-backend
+  annotations:
+    external-dns.alpha.kubernetes.io/hostname: optin.dev.example.com
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: optin-backend-cert
+  namespace: optin-backend
+spec:
+  domains:
+    - optin.dev.example.com

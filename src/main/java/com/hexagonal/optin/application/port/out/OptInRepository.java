@@ -6,14 +6,19 @@ import com.hexagonal.optin.domain.OptInStatus;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /** Driven port: storage of opt-ins. Finders use domain language, not JPA names (CLAUDE.md). */
 public interface OptInRepository {
 
-    /** Inserts when {@code id} is null (the repository assigns it), otherwise updates. */
+    /**
+     * Inserts when {@code id} is null (the repository assigns a UUID), otherwise updates.
+     * Saving a second ACTIVE opt-in for the same (merchant, grantee) throws
+     * {@link com.hexagonal.optin.domain.DuplicateActiveOptInException} (R1 backstop).
+     */
     OptIn save(OptIn optIn);
 
-    Optional<OptIn> findById(int id);
+    Optional<OptIn> findById(UUID id);
 
     Optional<OptIn> findActive(String merchant, String grantee);
 

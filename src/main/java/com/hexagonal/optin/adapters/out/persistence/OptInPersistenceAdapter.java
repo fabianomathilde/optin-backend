@@ -4,18 +4,22 @@ import com.hexagonal.optin.application.port.out.OptInRepository;
 import com.hexagonal.optin.domain.DuplicateActiveOptInException;
 import com.hexagonal.optin.domain.OptIn;
 import com.hexagonal.optin.domain.OptInStatus;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Driven adapter for {@link OptInRepository} backed by PostgreSQL (phase 2).
  * Converts between the domain {@link OptIn} and {@link OptInEntity}.
+ * Active unless {@code optin.persistence} selects another adapter (ADR 0005).
  */
 @Component
+@ConditionalOnProperty(name = "optin.persistence", havingValue = "postgres", matchIfMissing = true)
 class OptInPersistenceAdapter implements OptInRepository {
 
     /** Partial unique index from V1 that backs R1 when two grants race. */
@@ -29,8 +33,9 @@ class OptInPersistenceAdapter implements OptInRepository {
 
     @Override
     public OptIn save(OptIn optIn) {
+        OptIn withId = optIn.id() == null ? optIn.withId(UUID.randomUUID()) : optIn;
         try {
-            return toDomain(jpa.saveAndFlush(toEntity(optIn)));
+            return toDomain(jpa.saveAndFlush(toEntity(withId)));
         } catch (DataIntegrityViolationException e) {
             if (violatesActivePairIndex(e)) {
                 throw new DuplicateActiveOptInException();
@@ -40,7 +45,7 @@ class OptInPersistenceAdapter implements OptInRepository {
     }
 
     @Override
-    public Optional<OptIn> findById(int id) {
+    public Optional<OptIn> findById(UUID id) {
         return jpa.findById(id).map(OptInPersistenceAdapter::toDomain);
     }
 

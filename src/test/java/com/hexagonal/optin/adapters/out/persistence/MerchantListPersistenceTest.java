@@ -1,6 +1,7 @@
 package com.hexagonal.optin.adapters.out.persistence;
 
 import com.hexagonal.optin.application.port.out.MerchantList;
+import com.hexagonal.optin.domain.Merchant;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
@@ -46,5 +47,15 @@ class MerchantListPersistenceTest {
     @Test
     void merchantNotInTheTableIsNotActive() {
         assertThat(merchants.isActive("99999999000199")).isFalse();
+    }
+
+    @Test
+    void addedMerchantIsActiveAndAddingTwiceKeepsTheFirstDate() {
+        merchants.add(new Merchant("45543915000181", LocalDate.of(2026, 11, 20)));
+        merchants.add(new Merchant("45543915000181", LocalDate.of(2026, 12, 1)));
+
+        assertThat(merchants.isActive("45543915000181")).isTrue();
+        assertThat(jdbc.queryForObject("SELECT created_at FROM merchant WHERE merchant = ?",
+                LocalDate.class, "45543915000181")).isEqualTo(LocalDate.of(2026, 11, 20));
     }
 }

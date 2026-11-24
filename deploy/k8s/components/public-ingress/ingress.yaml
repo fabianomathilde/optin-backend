@@ -1,0 +1,19 @@
+# Public HTTP(S) load balancer (~$18/month) on the static IP reserved by the IaC repo
+# (optin-backend-ingress-ip: ingress.enabled + ips.optin-backend in the IaC network.yaml).
+# Without a domain the API is reachable on http://<ingress_ip_address>/ .
+# The https-domain component adds a hostname (ExternalDNS creates the record) and a
+# Google-managed certificate.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: optin-backend
+  namespace: optin-backend
+  annotations:
+    kubernetes.io/ingress.class: gce
+    kubernetes.io/ingress.global-static-ip-name: optin-backend-ingress-ip
+spec:
+  defaultBackend:
+    service:
+      name: optin-backend
+      port:
+        number: 80

@@ -1,0 +1,8 @@
+# Optional: public access through a GKE Ingress (external Application Load Balancer).
+# Requires ingress.enabled and ips.optin-backend in the IaC repo's envs/<env>/network.yaml,
+# which reserve the static IP the Ingress uses. Without it, use: kubectl -n optin-backend port-forward svc/optin-backend 8080:80
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - ingress.yaml

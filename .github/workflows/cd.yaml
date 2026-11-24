@@ -6,10 +6,10 @@
 #                              to reach prod)
 #
 # GitHub Environments (variables from the IaC repo:
-#   scripts/tf.sh <env> foundation output github_variables_app_repo):
+#   scripts/tf.sh <env> identities output -json github_variables | jq '."optin-backend-ci"'):
 #   dev  : GCP_REGION, WIF_PROVIDER, DEPLOYER_SA, GKE_CLUSTER, ARTIFACT_REPOSITORY
 #   prod : the same keys for prod, plus DEV_ARTIFACT_REPOSITORY
-#          (us-central1-docker.pkg.dev/registry-institution-dev/optin);
+#          (us-central1-docker.pkg.dev/registry-institution-dev/optin-backend);
 #          Required reviewers = you, Deployment branches = main
 #
 # Note: workflow_run always uses the cd.yaml from the default branch (main), so changes to this
@@ -34,8 +34,8 @@ permissions:
   id-token: write
 
 env:
-  APP: optin
-  NAMESPACE: optin
+  APP: optin-backend
+  NAMESPACE: optin-backend
   KUSTOMIZE_VERSION: 5.7.1
   SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.sha || github.event.workflow_run.head_sha }}
   BRANCH: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.workflow_run.head_branch }}
@@ -48,7 +48,7 @@ jobs:
       (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     environment: dev
-    concurrency: deploy-optin-dev
+    concurrency: deploy-optin-backend-dev
     outputs:
       digest: ${{ steps.image.outputs.digest }}
     steps:
@@ -86,12 +86,12 @@ jobs:
           kubectl -n "$NAMESPACE" rollout status "deployment/${APP}" --timeout=10m
       - name: smoke test
         run: |
-          # Autopilot may need a minute to place the pod, hence the long pod-running-timeout.
-          kubectl -n "$NAMESPACE" run "smoke-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" --rm -i --restart=Never \
-            --pod-running-timeout=5m \
-            --image=curlimages/curl:8.17.0 \
-            --overrides='{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":100,"seccompProfile":{"type":"RuntimeDefault"}}}}' \
-            -- curl -fsS --retry 5 --retry-delay 3 "http://${APP}/actuator/health/readiness"
+          # Tunnel from the runner to the service: no extra pod or public image needed, so the
+          # private cluster needs no internet access (no Cloud NAT).
+          kubectl -n "$NAMESPACE" port-forward "svc/${APP}" 18080:80 >/tmp/port-forward.log 2>&1 &
+          trap 'kill %1' EXIT
+          curl -fsS --retry 10 --retry-delay 3 --retry-all-errors \
+            "http://127.0.0.1:18080/actuator/health/readiness"
       - name: summary
         run: echo "### dev ← \`${{ steps.image.outputs.ref }}\` (${BRANCH} @ ${SHA:0:7})" >> "$GITHUB_STEP_SUMMARY"
 
@@ -102,7 +102,7 @@ jobs:
     needs: dev
     runs-on: ubuntu-latest
     environment: prod # waits for the Required reviewers
-    concurrency: deploy-optin-prod
+    concurrency: deploy-optin-backend-prod
     env:
       DIGEST: ${{ needs.dev.outputs.digest }}
     steps:

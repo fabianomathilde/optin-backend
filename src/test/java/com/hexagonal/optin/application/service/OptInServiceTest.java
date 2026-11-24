@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -166,7 +167,7 @@ class OptInServiceTest {
 
     @Test
     void revokingUnknownOptInIsRejected() {                                    // R9
-        assertThatThrownBy(() -> service.revoke(new RevokeOptInCommand(999)))
+        assertThatThrownBy(() -> service.revoke(new RevokeOptInCommand(UUID.randomUUID())))
                 .isInstanceOf(OptInNotFoundException.class);
     }
 

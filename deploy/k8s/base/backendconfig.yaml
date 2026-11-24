@@ -1,0 +1,17 @@
+# Load balancer health check: the readiness endpoint is public (no Basic auth), everything
+# else under /actuator stays closed.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: optin-backend
+  namespace: optin-backend
+spec:
+  healthCheck:
+    type: HTTP
+    requestPath: /actuator/health/readiness
+    port: 8080
+    checkIntervalSec: 15
+    timeoutSec: 5
+  connectionDraining:
+    drainingTimeoutSec: 30
+  timeoutSec: 30

@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: optin-backend
+  namespace: optin-backend
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      app: optin-backend
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: optin-backend
+    spec:
+      serviceAccountName: sa-optin-backend
+      terminationGracePeriodSeconds: 45
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+
+      containers:
+        - name: optin-backend
+          image: optin-backend # replaced by the overlay / CI with <registry>/optin-backend@sha256:...
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Profile "firestore" and the GCP project come from the overlay's config map (ADR 0005).
+            # Credentials: Workload Identity (the sa-optin-backend KSA has roles/datastore.user).
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: optin-backend-config
+                  key: SPRING_PROFILES_ACTIVE
+            - name: GOOGLE_CLOUD_PROJECT
+              valueFrom:
+                configMapKeyRef:
+                  name: optin-backend-config
+                  key: GOOGLE_CLOUD_PROJECT
+            - name: SPRING_SECURITY_USER_NAME
+              value: optin-api
+          volumeMounts:
+            - name: secrets
+              mountPath: /etc/optin/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 5
+            failureThreshold: 36 # up to 3 min for JVM start
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            failureThreshold: 3
+          lifecycle:
+            preStop:
+              # Give the load balancer time to stop sending traffic before Spring shuts down.
+              exec:
+                command: ["sh", "-c", "sleep 10"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              memory: 768Mi
+
+      volumes:
+        - name: secrets
+          csi:
+            driver: secrets-store-gke.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: optin-backend-secrets
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

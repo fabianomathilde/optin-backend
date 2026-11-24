@@ -21,8 +21,10 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -36,6 +38,8 @@ class OptInControllerTest {
 
     private static final String MERCHANT = "11222333000181";
     private static final String GRANTEE = "00360305000104";
+    private static final UUID ID_1 = UUID.fromString("0b0e6c0e-6d1f-4c1a-9b3a-3f6d2a1e0001");
+    private static final UUID ID_2 = UUID.fromString("0b0e6c0e-6d1f-4c1a-9b3a-3f6d2a1e0002");
 
     @Autowired
     private MockMvc mockMvc;
@@ -51,7 +55,7 @@ class OptInControllerTest {
 
     @Test
     void createReturns201WithTheCreatedOptIn() throws Exception {
-        when(createOptIn.create(any())).thenReturn(activeOptIn(1));
+        when(createOptIn.create(any())).thenReturn(activeOptIn(ID_1));
 
         mockMvc.perform(post("/opt-ins").with(csrf())
                         .contentType("application/json")
@@ -60,7 +64,7 @@ class OptInControllerTest {
                                  "startDate":"2026-12-01","validUntil":"2027-12-01"}
                                 """.formatted(MERCHANT, GRANTEE)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.id").value(ID_1.toString()))
                 .andExpect(jsonPath("$.merchant").value(MERCHANT))
                 .andExpect(jsonPath("$.grantee").value(GRANTEE))
                 .andExpect(jsonPath("$.frequency").value("MONTHLY"))
@@ -72,19 +76,19 @@ class OptInControllerTest {
     @Test
     void listByGranteeReturnsOptIns() throws Exception {
         when(listOptIns.listByGrantee(GRANTEE, Optional.empty()))
-                .thenReturn(List.of(activeOptIn(1), activeOptIn(2)));
+                .thenReturn(List.of(activeOptIn(ID_1), activeOptIn(ID_2)));
 
         mockMvc.perform(get("/grantees/{grantee}/opt-ins", GRANTEE))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(2))
-                .andExpect(jsonPath("$[0].id").value(1))
-                .andExpect(jsonPath("$[1].id").value(2));
+                .andExpect(jsonPath("$[0].id").value(ID_1.toString()))
+                .andExpect(jsonPath("$[1].id").value(ID_2.toString()));
     }
 
     @Test
     void listByGranteeFiltersByStatus() throws Exception {
         when(listOptIns.listByGrantee(GRANTEE, Optional.of(OptInStatus.ACTIVE)))
-                .thenReturn(List.of(activeOptIn(1)));
+                .thenReturn(List.of(activeOptIn(ID_1)));
 
         mockMvc.perform(get("/grantees/{grantee}/opt-ins", GRANTEE).param("status", "ACTIVE"))
                 .andExpect(status().isOk())
@@ -113,24 +117,33 @@ class OptInControllerTest {
 
     @Test
     void revokeReturnsTheRevokedOptIn() throws Exception {
-        when(revokeOptIn.revoke(any())).thenReturn(new OptIn(7, MERCHANT, GRANTEE, Frequency.DAILY,
+        when(revokeOptIn.revoke(any())).thenReturn(new OptIn(ID_1, MERCHANT, GRANTEE, Frequency.DAILY,
                 LocalDate.of(2026, 12, 1), LocalDate.of(2027, 12, 1), OptInStatus.REVOKED,
                 Instant.parse("2026-11-19T12:00:00Z")));
 
-        mockMvc.perform(post("/opt-ins/{id}/revoke", 7).with(csrf()))
+        mockMvc.perform(post("/opt-ins/{id}/revoke", ID_1).with(csrf()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(7))
+                .andExpect(jsonPath("$.id").value(ID_1.toString()))
                 .andExpect(jsonPath("$.status").value("REVOKED"))
                 .andExpect(jsonPath("$.revokedAt").value("2026-11-19T12:00:00Z"));
     }
 
     @Test
     void unknownOptInReturns404WithMessage() throws Exception {
-        when(revokeOptIn.revoke(any())).thenThrow(new OptInNotFoundException(99));
+        UUID unknown = UUID.fromString("0b0e6c0e-6d1f-4c1a-9b3a-3f6d2a1e0099");
+        when(revokeOptIn.revoke(any())).thenThrow(new OptInNotFoundException(unknown));
 
-        mockMvc.perform(post("/opt-ins/{id}/revoke", 99).with(csrf()))
+        mockMvc.perform(post("/opt-ins/{id}/revoke", unknown).with(csrf()))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("Opt-in 99 not found"));
+                .andExpect(jsonPath("$.message").value("Opt-in " + unknown + " not found"));
+    }
+
+    @Test
+    void malformedIdReturns400() throws Exception {
+        mockMvc.perform(post("/opt-ins/{id}/revoke", "not-a-uuid").with(csrf()))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(revokeOptIn);
     }
 
     @Test
@@ -173,7 +186,7 @@ class OptInControllerTest {
                 .andExpect(status().isUnprocessableEntity());
     }
 
-    private static OptIn activeOptIn(int id) {
+    private static OptIn activeOptIn(UUID id) {
         return new OptIn(id, MERCHANT, GRANTEE, Frequency.MONTHLY,
                 LocalDate.of(2026, 12, 1), LocalDate.of(2027, 12, 1), OptInStatus.ACTIVE, null);
     }

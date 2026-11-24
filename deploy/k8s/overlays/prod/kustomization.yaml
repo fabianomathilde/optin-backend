@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# prod = project registry-institution-prd. Deployed only by the prod job of cd.yaml, which promotes
+# an image digest already running in dev (build once, deploy many).
+resources:
+  - ../../base
+  - pdb.yaml
+
+# Public access / HTTPS: same steps as the dev overlay (see the comment there).
+# components:
+#   - ../../components/public-ingress
+#   - ../../components/https-domain
+
+configMapGenerator:
+  - name: optin-backend-config
+    literals:
+      - SPRING_PROFILES_ACTIVE=firestore
+      - GOOGLE_CLOUD_PROJECT=registry-institution-prd
+
+replicas:
+  - name: optin-backend
+    count: 2
+
+patches:
+  - target:
+      kind: SecretProviderClass
+      name: optin-backend-secrets
+    patch: |-
+      - op: replace
+        path: /spec/parameters/secrets
+        value: |
+          - resourceName: "projects/registry-institution-prd/secrets/optin-backend-api-password/versions/latest"
+            path: "spring.security.user.password"
+
+images:
+  - name: optin-backend
+    newName: us-central1-docker.pkg.dev/registry-institution-prd/optin-backend/optin-backend
+    newTag: latest

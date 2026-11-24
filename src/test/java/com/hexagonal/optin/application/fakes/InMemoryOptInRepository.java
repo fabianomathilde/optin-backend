@@ -6,29 +6,26 @@ import com.hexagonal.optin.domain.OptInStatus;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Predicate;
 
 public class InMemoryOptInRepository implements OptInRepository {
 
-    private final Map<Integer, OptIn> store = new ConcurrentHashMap<>();
-    private final AtomicInteger sequence = new AtomicInteger(1);
+    private final Map<UUID, OptIn> store = new ConcurrentHashMap<>();
 
     @Override
     public OptIn save(OptIn optIn) {
-        int id = optIn.id() == null ? sequence.getAndIncrement() : optIn.id();
-        OptIn stored = new OptIn(id, optIn.merchant(), optIn.grantee(), optIn.frequency(),
-                optIn.startDate(), optIn.validUntil(), optIn.status(), optIn.revokedAt());
-        store.put(id, stored);
+        OptIn stored = optIn.id() == null ? optIn.withId(UUID.randomUUID()) : optIn;
+        store.put(stored.id(), stored);
         return stored;
     }
 
     @Override
-    public Optional<OptIn> findById(int id) {
+    public Optional<OptIn> findById(UUID id) {
         return Optional.ofNullable(store.get(id));
     }
 
@@ -56,7 +53,7 @@ public class InMemoryOptInRepository implements OptInRepository {
                 .toList();
     }
 
-    private List<OptIn> filter(java.util.function.Predicate<OptIn> condition, Optional<OptInStatus> status) {
+    private List<OptIn> filter(Predicate<OptIn> condition, Optional<OptInStatus> status) {
         return all().stream()
                 .filter(condition)
                 .filter(o -> status.map(s -> o.status() == s).orElse(true))
@@ -64,8 +61,6 @@ public class InMemoryOptInRepository implements OptInRepository {
     }
 
     private List<OptIn> all() {
-        List<OptIn> list = new ArrayList<>(store.values());
-        list.sort(Comparator.comparing(OptIn::id));
-        return list;
+        return new ArrayList<>(store.values());
     }
 }
