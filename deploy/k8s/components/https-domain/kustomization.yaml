@@ -1,0 +1,22 @@
+# Optional: public hostname + Google-managed TLS certificate.
+# Requires the public-ingress component (list it before this one in the overlay).
+# The overlay sets the real hostname (https-domain.patch.yaml). ExternalDNS (installed by the IaC
+# platform stack) reads the hostname annotation and creates the A record in Cloud DNS. The
+# certificate becomes Active once that record resolves to the Ingress IP (can take ~30-60 min).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - managedcertificate.yaml
+
+patches:
+  - target:
+      kind: Ingress
+      name: optin-backend
+    patch: |-
+      - op: add
+        path: /metadata/annotations/networking.gke.io~1managed-certificates
+        value: optin-backend-cert
+      - op: add
+        path: /metadata/annotations/external-dns.alpha.kubernetes.io~1hostname
+        value: optin.example.com

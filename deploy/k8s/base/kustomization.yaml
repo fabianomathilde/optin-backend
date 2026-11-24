@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Environment-independent manifests. Overlays (../overlays/<env>) set the image, the Cloud SQL
+# instance, the Secret Manager project and anything else that differs per environment.
+# The namespace, its quota, the deployer RBAC and the Kubernetes service account sa-optin-backend
+# (with its Workload Identity annotation) are created by the IaC repo (stacks/platform, from
+# envs/<env>/kubernetes.yaml and service_accounts.yaml). They are not part of these manifests.
+# No public endpoint by default: reach the app with kubectl port-forward, or enable the
+# public-ingress component in an overlay.
+namespace: optin-backend
+labels:
+  - pairs:
+      app.kubernetes.io/name: optin-backend
+      app.kubernetes.io/part-of: registry-institution
+    includeSelectors: false
+
+resources:
+  - secretproviderclass.yaml
+  - deployment.yaml
+  - service.yaml
+  - backendconfig.yaml

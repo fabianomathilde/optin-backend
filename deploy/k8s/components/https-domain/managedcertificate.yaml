@@ -1,0 +1,8 @@
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: optin-backend-cert
+  namespace: optin-backend
+spec:
+  domains:
+    - optin.example.com # overridden by the overlay

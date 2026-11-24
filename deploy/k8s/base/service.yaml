@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: optin-backend
+  namespace: optin-backend
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}' # container-native load balancing (LB -> pod IPs)
+    cloud.google.com/backend-config: '{"default": "optin-backend"}'
+spec:
+  type: ClusterIP
+  selector:
+    app: optin-backend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

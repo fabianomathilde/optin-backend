@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# dev = project registry-institution-dev. Values must match the IaC outputs:
+#   scripts/tf.sh dev foundation output  (in registry-institution-iac)
+resources:
+  - ../../base
+
+# Public access (off by default, reach the app with kubectl port-forward):
+#   1. IaC repo: ingress.enabled: true + ips.optin-backend in envs/dev/network.yaml (reserves the static IP)
+#   2. uncomment public-ingress below
+# HTTPS + hostname: also set dns.domain in the IaC repo, put the hostname in
+# https-domain.patch.yaml, uncomment https-domain and add "- path: https-domain.patch.yaml"
+# to the patches list.
+# components:
+#   - ../../components/public-ingress
+#   - ../../components/https-domain
+
+configMapGenerator:
+  - name: optin-backend-config
+    literals:
+      - SPRING_PROFILES_ACTIVE=firestore
+      - GOOGLE_CLOUD_PROJECT=registry-institution-dev
+
+patches:
+  - target:
+      kind: SecretProviderClass
+      name: optin-backend-secrets
+    patch: |-
+      - op: replace
+        path: /spec/parameters/secrets
+        value: |
+          - resourceName: "projects/registry-institution-dev/secrets/optin-backend-api-password/versions/latest"
+            path: "spring.security.user.password"
+
+# CI pins the exact image built from the commit:
+#   kustomize edit set image optin-backend=<registry>/optin-backend@sha256:...
+images:
+  - name: optin-backend
+    newName: us-central1-docker.pkg.dev/registry-institution-dev/optin-backend/optin-backend
+    newTag: latest
