@@ -1,6 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Applies to everything this overlay builds, including what it generates itself (the config map
+# below). Without it, generated objects have no namespace and kubectl sends them to "default",
+# where the deployer has no rights.
+namespace: optin-backend
+
 # prod = project registry-institution-prd. Deployed only by the prod job of cd.yaml, which promotes
 # an image digest already running in dev (build once, deploy many).
 resources:

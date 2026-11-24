@@ -1,6 +1,11 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Applies to everything this overlay builds, including what it generates itself (the config map
+# below). Without it, generated objects have no namespace and kubectl sends them to "default",
+# where the deployer has no rights.
+namespace: optin-backend
+
 # dev = project registry-institution-dev. Values must match the IaC outputs:
 #   scripts/tf.sh dev foundation output  (in registry-institution-iac)
 resources:
